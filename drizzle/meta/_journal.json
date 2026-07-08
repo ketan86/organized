@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1783290229427,
+      "tag": "0000_amusing_selene",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1783291000000,
+      "tag": "0001_push_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783292000000,
+      "tag": "0002_task_scheduled_time",
+      "breakpoints": true
+    }
+  ]
+}

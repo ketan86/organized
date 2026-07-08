@@ -1,0 +1,14 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "0001_push_reminders",
+  "prevId": "0000_amusing_selene",
+  "tables": {},
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  }
+}
