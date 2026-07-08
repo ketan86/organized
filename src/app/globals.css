@@ -462,6 +462,7 @@ html.light .sheet-panel-surface {
   z-index: 10;
   display: flex;
   width: 100%;
+  min-height: 0;
   flex-direction: column;
   isolation: isolate;
 }

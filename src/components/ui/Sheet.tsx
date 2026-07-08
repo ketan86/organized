@@ -23,7 +23,7 @@ export function Sheet({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className={`sheet-panel ${maxHeight} ${className} md:max-w-lg`}>
+      <div className={`sheet-panel min-h-0 ${maxHeight} ${className} md:max-w-lg`}>
         <div className="sheet-panel-surface">
           <div className="sheet-handle" />
           {children}
@@ -43,7 +43,7 @@ export function SheetHeader({
   eyebrow?: string;
 }) {
   return (
-    <div className="px-5 pt-1">
+    <div className="shrink-0 px-5 pt-1">
       {eyebrow && (
         <p className="text-[11px] font-medium uppercase tracking-wider text-app-accent-soft">
           {eyebrow}
@@ -67,7 +67,7 @@ export function SheetBody({
   className?: string;
 }) {
   return (
-    <div className={`flex-1 overflow-y-auto px-5 py-4 ${className}`}>
+    <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 ${className}`}>
       {children}
     </div>
   );

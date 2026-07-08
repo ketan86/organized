@@ -302,7 +302,7 @@ export function RightPanel({
 
   if (embedded) {
     return (
-      <div className="flex w-full flex-col">
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <PanelHeader
           title={title}
           subtitle={subtitle}

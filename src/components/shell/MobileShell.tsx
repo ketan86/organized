@@ -249,7 +249,7 @@ export function MobileShell({
             aria-label="Close panel"
             onClick={onClosePanel}
           />
-          <div className="sheet-panel max-h-[90%] pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          <div className="sheet-panel max-h-[90%] min-h-0 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
             <div className="sheet-panel-surface">
               <RightPanel
               mode={rightPanel}
