@@ -2,12 +2,12 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { reminderDeliveries } from "@/db/schema";
 
-export function hasReminderBeenDelivered(
+export async function hasReminderBeenDelivered(
   userId: string,
   dedupeKey: string,
-): boolean {
+): Promise<boolean> {
   const db = getDb();
-  const row = db
+  const row = await db
     .select()
     .from(reminderDeliveries)
     .where(
@@ -20,13 +20,13 @@ export function hasReminderBeenDelivered(
   return Boolean(row);
 }
 
-export function markReminderDelivered(
+export async function markReminderDelivered(
   userId: string,
   dedupeKey: string,
-): void {
+): Promise<void> {
   const db = getDb();
-  db.insert(reminderDeliveries)
+  await db
+    .insert(reminderDeliveries)
     .values({ userId, dedupeKey })
-    .onConflictDoNothing()
-    .run();
+    .onConflictDoNothing();
 }

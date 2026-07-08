@@ -14,7 +14,7 @@ export async function POST(request: Request, context: RouteContext) {
     const body = (await request.json().catch(() => ({}))) as {
       occurrenceDate?: string;
     };
-    const task = completeTask(userId, id, body.occurrenceDate);
+    const task = await completeTask(userId, id, body.occurrenceDate);
     return NextResponse.json({ task });
   } catch (error) {
     return jsonError(error, "Failed to complete task");

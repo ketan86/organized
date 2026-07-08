@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     const userId = await requireSessionUserId();
     const body = bodySchema.parse(await request.json());
-    upsertPushSubscription(userId, {
+    await upsertPushSubscription(userId, {
       endpoint: body.endpoint,
       keys: body.keys,
       userAgent: request.headers.get("user-agent") ?? undefined,

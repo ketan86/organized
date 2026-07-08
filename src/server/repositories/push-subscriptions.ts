@@ -9,55 +9,56 @@ export type PushSubscriptionInput = {
   userAgent?: string;
 };
 
-export function upsertPushSubscription(
+export async function upsertPushSubscription(
   userId: string,
   input: PushSubscriptionInput,
-): void {
+): Promise<void> {
   const db = getDb();
-  const existing = db
+  const existing = await db
     .select()
     .from(pushSubscriptions)
     .where(eq(pushSubscriptions.endpoint, input.endpoint))
     .get();
 
   if (existing) {
-    db.update(pushSubscriptions)
+    await db
+      .update(pushSubscriptions)
       .set({
         userId,
         p256dh: input.keys.p256dh,
         auth: input.keys.auth,
         userAgent: input.userAgent ?? null,
       })
-      .where(eq(pushSubscriptions.endpoint, input.endpoint))
-      .run();
+      .where(eq(pushSubscriptions.endpoint, input.endpoint));
     return;
   }
 
-  db.insert(pushSubscriptions)
-    .values({
-      id: randomUUID(),
-      userId,
-      endpoint: input.endpoint,
-      p256dh: input.keys.p256dh,
-      auth: input.keys.auth,
-      userAgent: input.userAgent ?? null,
-    })
-    .run();
+  await db.insert(pushSubscriptions).values({
+    id: randomUUID(),
+    userId,
+    endpoint: input.endpoint,
+    p256dh: input.keys.p256dh,
+    auth: input.keys.auth,
+    userAgent: input.userAgent ?? null,
+  });
 }
 
-export function deletePushSubscription(userId: string, endpoint: string): void {
+export async function deletePushSubscription(
+  userId: string,
+  endpoint: string,
+): Promise<void> {
   const db = getDb();
-  db.delete(pushSubscriptions)
+  await db
+    .delete(pushSubscriptions)
     .where(
       and(
         eq(pushSubscriptions.userId, userId),
         eq(pushSubscriptions.endpoint, endpoint),
       ),
-    )
-    .run();
+    );
 }
 
-export function listPushSubscriptionsForUser(userId: string) {
+export async function listPushSubscriptionsForUser(userId: string) {
   const db = getDb();
   return db
     .select()

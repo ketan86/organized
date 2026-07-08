@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const user = getUserByEmail(body.email);
+    const user = await getUserByEmail(body.email);
     if (!user) {
       return NextResponse.json(
         { error: "Invalid email or password" },

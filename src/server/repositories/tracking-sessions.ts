@@ -12,38 +12,38 @@ export type StartTrackingInput = {
   areaId: string;
 };
 
-function stopRunningSessions(userId: string, endedAt: Date): void {
+async function stopRunningSessions(userId: string, endedAt: Date): Promise<void> {
   const db = getDb();
-  db.update(sessions)
+  await db
+    .update(sessions)
     .set({ endedAt })
-    .where(and(eq(sessions.userId, userId), isNull(sessions.endedAt)))
-    .run();
+    .where(and(eq(sessions.userId, userId), isNull(sessions.endedAt)));
 }
 
-export function listSessions(userId: string): Session[] {
+export async function listSessions(userId: string): Promise<Session[]> {
   const db = getDb();
-  return db
+  const rows = await db
     .select()
     .from(sessions)
     .where(eq(sessions.userId, userId))
-    .all()
-    .map(mapSessionRow);
+    .all();
+  return rows.map(mapSessionRow);
 }
 
-export function startTracking(
+export async function startTracking(
   userId: string,
   input: StartTrackingInput,
-): Session[] {
+): Promise<Session[]> {
   const now = new Date();
   const db = getDb();
 
-  db.transaction((tx) => {
-    tx.update(sessions)
+  await db.transaction(async (tx) => {
+    await tx
+      .update(sessions)
       .set({ endedAt: now })
-      .where(and(eq(sessions.userId, userId), isNull(sessions.endedAt)))
-      .run();
+      .where(and(eq(sessions.userId, userId), isNull(sessions.endedAt)));
 
-    tx.insert(sessions).values({
+    await tx.insert(sessions).values({
       id: `session-${randomUUID()}`,
       userId,
       targetType: input.targetType,
@@ -51,20 +51,20 @@ export function startTracking(
       areaId: input.areaId,
       startedAt: now,
       endedAt: null,
-    }).run();
+    });
   });
 
   return listSessions(userId);
 }
 
-export function stopTracking(userId: string): Session[] {
-  stopRunningSessions(userId, new Date());
+export async function stopTracking(userId: string): Promise<Session[]> {
+  await stopRunningSessions(userId, new Date());
   return listSessions(userId);
 }
 
-export function getRunningSession(userId: string): Session | null {
+export async function getRunningSession(userId: string): Promise<Session | null> {
   const db = getDb();
-  const row = db
+  const row = await db
     .select()
     .from(sessions)
     .where(and(eq(sessions.userId, userId), isNull(sessions.endedAt)))
@@ -72,12 +72,12 @@ export function getRunningSession(userId: string): Session | null {
   return row ? mapSessionRow(row) : null;
 }
 
-export function stopSessionById(
+export async function stopSessionById(
   userId: string,
   sessionId: string,
-): Session {
+): Promise<Session> {
   const db = getDb();
-  const row = db
+  const row = await db
     .select()
     .from(sessions)
     .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
@@ -85,10 +85,10 @@ export function stopSessionById(
   if (!row) throw new ApiError(404, "Session not found");
 
   const endedAt = new Date();
-  db.update(sessions)
+  await db
+    .update(sessions)
     .set({ endedAt })
-    .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
-    .run();
+    .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)));
 
   return mapSessionRow({ ...row, endedAt });
 }

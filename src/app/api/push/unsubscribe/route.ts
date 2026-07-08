@@ -14,7 +14,7 @@ export async function DELETE(request: Request) {
   try {
     const userId = await requireSessionUserId();
     const body = bodySchema.parse(await request.json());
-    deletePushSubscription(userId, body.endpoint);
+    await deletePushSubscription(userId, body.endpoint);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return jsonError(error, "Failed to remove push subscription");

@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export async function POST() {
   try {
     const userId = await requireSessionUserId();
-    const sessions = stopTracking(userId);
+    const sessions = await stopTracking(userId);
     return NextResponse.json({ sessions });
   } catch (error) {
     return jsonError(error, "Failed to stop tracking");

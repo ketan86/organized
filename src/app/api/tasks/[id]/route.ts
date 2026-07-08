@@ -16,7 +16,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const userId = await requireSessionUserId();
     const { id } = await context.params;
     const body = (await request.json()) as UpdateTaskInput;
-    const task = updateTask(userId, id, body);
+    const task = await updateTask(userId, id, body);
     return NextResponse.json({ task });
   } catch (error) {
     return jsonError(error, "Failed to update task");
@@ -27,7 +27,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
   try {
     const userId = await requireSessionUserId();
     const { id } = await context.params;
-    deleteTask(userId, id);
+    await deleteTask(userId, id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return jsonError(error, "Failed to delete task");

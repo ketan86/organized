@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { areas, taskCompletedDates, tasks, usualWeekBlocks } from "@/db/schema";
+import { areas, taskCompletedDates, tasks, users, usualWeekBlocks } from "@/db/schema";
 import {
   boundaryBody,
   boundaryTitle,
@@ -17,39 +17,48 @@ import {
 import { listPushSubscriptionsForUser } from "@/server/repositories/push-subscriptions";
 import { isPushConfigured } from "@/server/notifications/vapid";
 
-function loadTasksForUser(userId: string): Task[] {
+async function loadTasksForUser(userId: string): Promise<Task[]> {
   const db = getDb();
-  const taskRows = db.select().from(tasks).where(eq(tasks.userId, userId)).all();
-  return taskRows.map((row) => {
-    const completedDates = db
-      .select()
-      .from(taskCompletedDates)
-      .where(eq(taskCompletedDates.taskId, row.id))
-      .all()
-      .map((r) => r.dateKey);
-    return mapTaskRow(row, completedDates);
-  });
+  const taskRows = await db
+    .select()
+    .from(tasks)
+    .where(eq(tasks.userId, userId))
+    .all();
+  const result: Task[] = [];
+  for (const row of taskRows) {
+    const completedDates = (
+      await db
+        .select()
+        .from(taskCompletedDates)
+        .where(eq(taskCompletedDates.taskId, row.id))
+        .all()
+    ).map((r) => r.dateKey);
+    result.push(mapTaskRow(row, completedDates));
+  }
+  return result;
 }
 
-function loadAreasForUser(userId: string): AreaDef[] {
+async function loadAreasForUser(userId: string): Promise<AreaDef[]> {
   const db = getDb();
-  return db
+  const rows = await db
     .select()
     .from(areas)
     .where(eq(areas.userId, userId))
-    .all()
+    .all();
+  return rows
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map(rowToAreaDef);
 }
 
-function loadUsualWeekForUser(userId: string) {
+async function loadUsualWeekForUser(userId: string) {
   const db = getDb();
-  return db
-    .select()
-    .from(usualWeekBlocks)
-    .where(eq(usualWeekBlocks.userId, userId))
-    .all()
-    .map(mapUsualWeekRow);
+  return (
+    await db
+      .select()
+      .from(usualWeekBlocks)
+      .where(eq(usualWeekBlocks.userId, userId))
+      .all()
+  ).map(mapUsualWeekRow);
 }
 
 export type DispatchResult = {
@@ -65,17 +74,17 @@ export async function dispatchDueReminders(
     return { dispatched: 0, pushConfigured: false };
   }
 
-  const userTasks = loadTasksForUser(userId);
+  const userTasks = await loadTasksForUser(userId);
   const dueTasks = collectDueReminders(userTasks, now);
-  const userAreas = loadAreasForUser(userId);
-  const usualWeek = loadUsualWeekForUser(userId);
+  const userAreas = await loadAreasForUser(userId);
+  const usualWeek = await loadUsualWeekForUser(userId);
   const dueBoundaries = collectDueAreaBoundaries(usualWeek, userAreas, now);
 
   if (dueTasks.length === 0 && dueBoundaries.length === 0) {
     return { dispatched: 0, pushConfigured: true };
   }
 
-  const subscriptions = listPushSubscriptionsForUser(userId);
+  const subscriptions = await listPushSubscriptionsForUser(userId);
   if (subscriptions.length === 0) {
     return { dispatched: 0, pushConfigured: true };
   }
@@ -83,7 +92,7 @@ export async function dispatchDueReminders(
   let dispatched = 0;
 
   for (const { task, dedupeKey } of dueTasks) {
-    if (hasReminderBeenDelivered(userId, dedupeKey)) continue;
+    if (await hasReminderBeenDelivered(userId, dedupeKey)) continue;
 
     const payload = {
       title: task.title,
@@ -104,13 +113,13 @@ export async function dispatchDueReminders(
     }
 
     if (sent) {
-      markReminderDelivered(userId, dedupeKey);
+      await markReminderDelivered(userId, dedupeKey);
       dispatched += 1;
     }
   }
 
   for (const { area, block, kind, dedupeKey } of dueBoundaries) {
-    if (hasReminderBeenDelivered(userId, dedupeKey)) continue;
+    if (await hasReminderBeenDelivered(userId, dedupeKey)) continue;
 
     const payload = {
       title: boundaryTitle(area, kind),
@@ -131,12 +140,27 @@ export async function dispatchDueReminders(
     }
 
     if (sent) {
-      markReminderDelivered(userId, dedupeKey);
+      await markReminderDelivered(userId, dedupeKey);
       dispatched += 1;
     }
   }
 
   return { dispatched, pushConfigured: true };
+}
+
+export async function dispatchDueRemindersForAllUsers(
+  now: Date = new Date(),
+): Promise<{ users: number; dispatched: number }> {
+  const db = getDb();
+  const allUsers = await db.select({ id: users.id }).from(users).all();
+  let dispatched = 0;
+
+  for (const user of allUsers) {
+    const result = await dispatchDueReminders(user.id, now);
+    dispatched += result.dispatched;
+  }
+
+  return { users: allUsers.length, dispatched };
 }
 
 export type PushTestResult = {
@@ -157,7 +181,7 @@ export async function sendTestPush(userId: string): Promise<PushTestResult> {
     };
   }
 
-  const subscriptions = listPushSubscriptionsForUser(userId);
+  const subscriptions = await listPushSubscriptionsForUser(userId);
   if (subscriptions.length === 0) {
     return {
       ok: false,

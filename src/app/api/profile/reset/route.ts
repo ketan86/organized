@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export async function POST() {
   try {
     const userId = await requireSessionUserId();
-    resetUserWorkspace(userId);
+    await resetUserWorkspace(userId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return jsonError(error, "Failed to reset workspace");

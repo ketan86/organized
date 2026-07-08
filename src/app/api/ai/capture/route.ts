@@ -18,7 +18,7 @@ const ALLOWED_IMAGE_TYPES = new Set([
 export async function POST(request: Request) {
   try {
     const userId = await requireSessionUserId();
-    const bootstrap = loadBootstrap(userId);
+    const bootstrap = await loadBootstrap(userId);
     const contentType = request.headers.get("content-type") ?? "";
 
     let text: string | undefined;

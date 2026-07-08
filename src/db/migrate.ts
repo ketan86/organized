@@ -1,10 +1,18 @@
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { migrate } from "drizzle-orm/libsql/migrator";
 import path from "node:path";
-import { getDb } from "./client";
+import { assertDatabaseConfig, getDb } from "./client";
 
-const db = getDb();
-const migrationsFolder = path.join(process.cwd(), "drizzle");
+async function main() {
+  console.log("Running database migrations…");
+  assertDatabaseConfig();
+  const db = getDb();
+  const migrationsFolder = path.join(process.cwd(), "drizzle");
+  await migrate(db, { migrationsFolder });
+  console.log("Migrations applied.");
+}
 
-migrate(db, { migrationsFolder });
-
-console.log("Migrations applied.");
+main().catch((error) => {
+  console.error("Database migration failed:");
+  console.error(error);
+  process.exit(1);
+});

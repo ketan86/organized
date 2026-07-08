@@ -27,31 +27,35 @@ import {
   usualWeekBlockRowsForUser,
 } from "@/server/repositories/mappers";
 
-export function loadBootstrap(userId: string): BootstrapResponse {
+export async function loadBootstrap(userId: string): Promise<BootstrapResponse> {
   const db = getDb();
-  const user = db.select().from(users).where(eq(users.id, userId)).get();
+  const user = await db.select().from(users).where(eq(users.id, userId)).get();
   if (!user) {
     throw new ApiError(404, "User not found");
   }
 
-  const intentRows = db
+  const intentRows = await db
     .select()
     .from(userIntents)
     .where(eq(userIntents.userId, userId))
     .all();
-  const areaRows = db
+  const areaRows = (await db
     .select()
     .from(areas)
     .where(eq(areas.userId, userId))
-    .all()
+    .all())
     .sort((a, b) => a.sortOrder - b.sortOrder);
-  const weekRows = db
+  const weekRows = await db
     .select()
     .from(usualWeekBlocks)
     .where(eq(usualWeekBlocks.userId, userId))
     .all();
-  const taskRows = db.select().from(tasks).where(eq(tasks.userId, userId)).all();
-  const sessionRows = db
+  const taskRows = await db
+    .select()
+    .from(tasks)
+    .where(eq(tasks.userId, userId))
+    .all();
+  const sessionRows = await db
     .select()
     .from(sessions)
     .where(eq(sessions.userId, userId))
@@ -60,7 +64,7 @@ export function loadBootstrap(userId: string): BootstrapResponse {
   const taskIds = taskRows.map((task) => task.id);
   const completedRows =
     taskIds.length > 0
-      ? db
+      ? await db
           .select()
           .from(taskCompletedDates)
           .where(inArray(taskCompletedDates.taskId, taskIds))
@@ -103,16 +107,19 @@ export type AreasSetupInput = {
   protectedIds: string[];
 };
 
-export function saveAreasSetup(userId: string, input: AreasSetupInput): void {
+export async function saveAreasSetup(
+  userId: string,
+  input: AreasSetupInput,
+): Promise<void> {
   const db = getDb();
   const selectedSet = new Set(input.selectedIds);
   const protectedSet = new Set(input.protectedIds);
   const weightMap = new Map(input.weights.map((w) => [w.id, w.hours]));
 
-  db.transaction((tx) => {
-    tx.delete(areas).where(eq(areas.userId, userId)).run();
+  await db.transaction(async (tx) => {
+    await tx.delete(areas).where(eq(areas.userId, userId));
     if (input.areas.length > 0) {
-      tx.insert(areas).values(
+      await tx.insert(areas).values(
         input.areas.map((area, index) =>
           areaDefToRow(area, userId, {
             isSelected: selectedSet.has(area.id),
@@ -121,7 +128,7 @@ export function saveAreasSetup(userId: string, input: AreasSetupInput): void {
             sortOrder: index,
           }),
         ),
-      ).run();
+      );
     }
   });
 }
@@ -132,14 +139,17 @@ export type ProfilePatch = {
   onboardingComplete?: boolean;
 };
 
-export function updateProfile(userId: string, patch: ProfilePatch): void {
+export async function updateProfile(
+  userId: string,
+  patch: ProfilePatch,
+): Promise<void> {
   const db = getDb();
   if (patch.intents) {
-    db.delete(userIntents).where(eq(userIntents.userId, userId)).run();
+    await db.delete(userIntents).where(eq(userIntents.userId, userId));
     if (patch.intents.length > 0) {
-      db.insert(userIntents).values(
+      await db.insert(userIntents).values(
         patch.intents.map((intentId) => ({ userId, intentId })),
-      ).run();
+      );
     }
   }
 
@@ -152,26 +162,26 @@ export function updateProfile(userId: string, patch: ProfilePatch): void {
   }
 
   if (patch.timeWindow !== undefined || patch.onboardingComplete !== undefined) {
-    db.update(users).set(userPatch).where(eq(users.id, userId)).run();
+    await db.update(users).set(userPatch).where(eq(users.id, userId));
   }
 }
 
-export function saveUsualWeek(
+export async function saveUsualWeek(
   userId: string,
   blocks: BootstrapResponse["usualWeek"],
-): void {
+): Promise<void> {
   const budget = validateUsualWeekBudget(blocks);
   if (!budget.ok) {
     throw new ApiError(400, usualWeekBudgetErrorMessage(budget.overDays));
   }
 
   const db = getDb();
-  db.transaction((tx) => {
-    tx.delete(usualWeekBlocks).where(eq(usualWeekBlocks.userId, userId)).run();
+  await db.transaction(async (tx) => {
+    await tx.delete(usualWeekBlocks).where(eq(usualWeekBlocks.userId, userId));
     if (blocks.length > 0) {
-      tx.insert(usualWeekBlocks).values(
+      await tx.insert(usualWeekBlocks).values(
         usualWeekBlockRowsForUser(userId, blocks),
-      ).run();
+      );
     }
   });
 }

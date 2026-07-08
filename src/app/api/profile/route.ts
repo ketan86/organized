@@ -14,7 +14,7 @@ export async function PATCH(request: Request) {
       timeWindow?: TimeWindow;
       onboardingComplete?: boolean;
     };
-    updateProfile(userId, body);
+    await updateProfile(userId, body);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return jsonError(error, "Failed to update profile");
