@@ -2,25 +2,15 @@
  * Local background reminder dispatcher (for when the app tab is fully closed).
  * Run alongside `npm run dev` in a second terminal.
  */
-import { eq } from "drizzle-orm";
-import { getDb } from "../src/db/client";
-import { users } from "../src/db/schema";
-import { dispatchDueReminders } from "../src/server/notifications/dispatch";
+import { dispatchDueRemindersForAllUsers } from "../src/server/notifications/dispatch";
 
 async function tick() {
-  const db = getDb();
-  const allUsers = db.select({ id: users.id }).from(users).all();
   const now = new Date();
-  let total = 0;
+  const result = await dispatchDueRemindersForAllUsers(now);
 
-  for (const user of allUsers) {
-    const result = await dispatchDueReminders(user.id, now);
-    total += result.dispatched;
-  }
-
-  if (total > 0) {
+  if (result.dispatched > 0) {
     console.log(
-      `[reminders] dispatched ${total} at ${now.toLocaleString()}`,
+      `[reminders] dispatched ${result.dispatched} at ${now.toLocaleString()}`,
     );
   }
 }

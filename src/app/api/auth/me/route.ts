@@ -14,7 +14,7 @@ export async function GET() {
     if (!userId) {
       return NextResponse.json({ user: null });
     }
-    const user = getUserById(userId);
+    const user = await getUserById(userId);
     if (!user) {
       return NextResponse.json({ user: null });
     }

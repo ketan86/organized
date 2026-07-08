@@ -10,7 +10,7 @@ import {
 } from "@/server/auth/session";
 import { seedUserWorkspace } from "@/server/repositories/workspace";
 
-export function getUserByEmail(email: string) {
+export async function getUserByEmail(email: string) {
   const db = getDb();
   return db
     .select()
@@ -19,7 +19,7 @@ export function getUserByEmail(email: string) {
     .get();
 }
 
-export function getUserById(userId: string) {
+export async function getUserById(userId: string) {
   const db = getDb();
   return db.select().from(users).where(eq(users.id, userId)).get();
 }
@@ -36,7 +36,7 @@ export async function registerUser(
     throw new ApiError(400, "Password must be at least 8 characters");
   }
 
-  const existing = getUserByEmail(normalized);
+  const existing = await getUserByEmail(normalized);
   if (existing) {
     throw new ApiError(409, "An account with this email already exists");
   }
@@ -45,17 +45,17 @@ export async function registerUser(
   const passwordHash = await hashPassword(password);
   const db = getDb();
 
-  db.insert(users).values({
+  await db.insert(users).values({
     id: userId,
     email: normalized,
     passwordHash,
     onboardingComplete: false,
     timeWindow: "today",
-  }).run();
+  });
 
-  seedUserWorkspace(userId);
+  await seedUserWorkspace(userId);
 
-  const user = getUserById(userId);
+  const user = await getUserById(userId);
   if (!user) {
     throw new ApiError(500, "Failed to create user");
   }

@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const userId = await requireSessionUserId();
-    const sessions = listSessions(userId);
+    const sessions = await listSessions(userId);
     return NextResponse.json({ sessions });
   } catch (error) {
     return jsonError(error, "Failed to list sessions");
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   try {
     const userId = await requireSessionUserId();
     const body = (await request.json()) as StartTrackingInput;
-    const sessions = startTracking(userId, body);
+    const sessions = await startTracking(userId, body);
     return NextResponse.json({ sessions }, { status: 201 });
   } catch (error) {
     return jsonError(error, "Failed to start tracking");

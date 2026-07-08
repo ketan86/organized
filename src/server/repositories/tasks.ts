@@ -32,9 +32,9 @@ export type UpdateTaskInput = Partial<{
   reminder: Reminder;
 }>;
 
-function getTaskForUser(userId: string, taskId: string) {
+async function getTaskForUser(userId: string, taskId: string) {
   const db = getDb();
-  const row = db
+  const row = await db
     .select()
     .from(tasks)
     .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
@@ -43,24 +43,27 @@ function getTaskForUser(userId: string, taskId: string) {
   return row;
 }
 
-function completedDatesForTask(taskId: string): string[] {
+async function completedDatesForTask(taskId: string): Promise<string[]> {
   const db = getDb();
-  return db
+  const rows = await db
     .select()
     .from(taskCompletedDates)
     .where(eq(taskCompletedDates.taskId, taskId))
-    .all()
-    .map((row) => row.dateKey);
+    .all();
+  return rows.map((row) => row.dateKey);
 }
 
-function toTask(row: typeof tasks.$inferSelect): Task {
-  return mapTaskRow(row, completedDatesForTask(row.id));
+async function toTask(row: typeof tasks.$inferSelect): Promise<Task> {
+  return mapTaskRow(row, await completedDatesForTask(row.id));
 }
 
-export function createTask(userId: string, input: CreateTaskInput): Task {
+export async function createTask(
+  userId: string,
+  input: CreateTaskInput,
+): Promise<Task> {
   const db = getDb();
   const id = `task-${randomUUID()}`;
-  db.insert(tasks).values({
+  await db.insert(tasks).values({
     id,
     userId,
     areaId: input.areaId,
@@ -73,48 +76,50 @@ export function createTask(userId: string, input: CreateTaskInput): Task {
     dueDate: input.dueDate ?? null,
     recurrence: input.recurrence ?? "none",
     reminder: input.reminder ?? "none",
-  }).run();
-  return toTask(getTaskForUser(userId, id));
+  });
+  return toTask(await getTaskForUser(userId, id));
 }
 
-export function updateTask(
+export async function updateTask(
   userId: string,
   taskId: string,
   input: UpdateTaskInput,
-): Task {
-  getTaskForUser(userId, taskId);
+): Promise<Task> {
+  await getTaskForUser(userId, taskId);
   const db = getDb();
-  db.update(tasks)
+  await db
+    .update(tasks)
     .set({
       ...input,
       notes: input.notes === undefined ? undefined : input.notes,
     })
-    .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
-    .run();
-  return toTask(getTaskForUser(userId, taskId));
+    .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  return toTask(await getTaskForUser(userId, taskId));
 }
 
-export function deleteTask(userId: string, taskId: string): void {
-  getTaskForUser(userId, taskId);
+export async function deleteTask(userId: string, taskId: string): Promise<void> {
+  await getTaskForUser(userId, taskId);
   const db = getDb();
-  db.delete(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
-    .run();
+  await db
+    .delete(tasks)
+    .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
 }
 
-export function completeTask(
+export async function completeTask(
   userId: string,
   taskId: string,
   occurrenceDate?: string,
-): Task {
-  const row = getTaskForUser(userId, taskId);
+): Promise<Task> {
+  const row = await getTaskForUser(userId, taskId);
   const db = getDb();
-  const task = toTask(row);
+  const task = await toTask(row);
 
   if (isRecurring(task) && occurrenceDate) {
     const existing = new Set(task.completedDates ?? []);
     if (!existing.has(occurrenceDate)) {
-      db.insert(taskCompletedDates).values({ taskId, dateKey: occurrenceDate }).run();
+      await db
+        .insert(taskCompletedDates)
+        .values({ taskId, dateKey: occurrenceDate });
       existing.add(occurrenceDate);
     }
     return {
@@ -123,14 +128,14 @@ export function completeTask(
     };
   }
 
-  db.update(tasks)
+  await db
+    .update(tasks)
     .set({ status: "done" })
-    .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
-    .run();
-  return toTask(getTaskForUser(userId, taskId));
+    .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  return toTask(await getTaskForUser(userId, taskId));
 }
 
-export function buyTimeOnTask(
+export async function buyTimeOnTask(
   userId: string,
   taskId: string,
   option: {
@@ -138,16 +143,16 @@ export function buyTimeOnTask(
     costLabel: string;
     timeSavedMinutes: number;
   },
-): Task {
-  const row = getTaskForUser(userId, taskId);
+): Promise<Task> {
+  const row = await getTaskForUser(userId, taskId);
   const db = getDb();
-  db.update(tasks)
+  await db
+    .update(tasks)
     .set({
       status: "bought_time",
       estimateMinutes: Math.max(15, row.estimateMinutes - option.timeSavedMinutes),
       notes: `Bought time: ${option.title} (${option.costLabel})`,
     })
-    .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
-    .run();
-  return toTask(getTaskForUser(userId, taskId));
+    .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  return toTask(await getTaskForUser(userId, taskId));
 }

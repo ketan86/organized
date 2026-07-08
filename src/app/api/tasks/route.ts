@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   try {
     const userId = await requireSessionUserId();
     const body = (await request.json()) as CreateTaskInput;
-    const task = createTask(userId, body);
+    const task = await createTask(userId, body);
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {
     return jsonError(error, "Failed to create task");

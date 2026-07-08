@@ -48,21 +48,21 @@ export async function createAuthSession(userId: string): Promise<string> {
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + SESSION_MS);
 
-  db.insert(authSessions).values({
+  await db.insert(authSessions).values({
     id: createAuthSessionId(),
     userId,
     tokenHash,
     expiresAt,
-  }).run();
+  });
 
   return token;
 }
 
 export async function deleteAuthSession(token: string): Promise<void> {
   const db = getDb();
-  db.delete(authSessions)
-    .where(eq(authSessions.tokenHash, hashToken(token)))
-    .run();
+  await db
+    .delete(authSessions)
+    .where(eq(authSessions.tokenHash, hashToken(token)));
 }
 
 export async function getUserIdFromToken(
@@ -70,7 +70,7 @@ export async function getUserIdFromToken(
 ): Promise<string | null> {
   if (!token) return null;
   const db = getDb();
-  const row = db
+  const row = await db
     .select()
     .from(authSessions)
     .where(

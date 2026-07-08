@@ -15,7 +15,7 @@ import {
 } from "@/lib/mock-data";
 import { areaDefToRow, usualWeekBlockRowsForUser } from "@/server/repositories/mappers";
 
-export function seedUserWorkspace(userId: string): void {
+export async function seedUserWorkspace(userId: string): Promise<void> {
   const catalog = createInitialAreas();
   const selectedIds = catalog.filter((a) => a.defaultSelected).map((a) => a.id);
   const protectedIds = catalog
@@ -27,12 +27,12 @@ export function seedUserWorkspace(userId: string): void {
 
   const db = getDb();
 
-  db.insert(userIntents).values([
+  await db.insert(userIntents).values([
     { userId, intentId: "family" },
     { userId, intentId: "rest" },
-  ]).run();
+  ]);
 
-  db.insert(areas).values(
+  await db.insert(areas).values(
     catalog.map((area, index) =>
       areaDefToRow(area, userId, {
         isSelected: selectedSet.has(area.id),
@@ -41,43 +41,46 @@ export function seedUserWorkspace(userId: string): void {
         sortOrder: index,
       }),
     ),
-  ).run();
+  );
 
   if (usualWeek.length > 0) {
-    db.insert(usualWeekBlocks).values(
+    await db.insert(usualWeekBlocks).values(
       usualWeekBlockRowsForUser(userId, usualWeek),
-    ).run();
+    );
   }
 }
 
-export function replaceUserIntents(userId: string, intents: IntentId[]): void {
+export async function replaceUserIntents(
+  userId: string,
+  intents: IntentId[],
+): Promise<void> {
   const db = getDb();
-  db.delete(userIntents).where(eq(userIntents.userId, userId)).run();
+  await db.delete(userIntents).where(eq(userIntents.userId, userId));
   if (intents.length > 0) {
-    db.insert(userIntents).values(
+    await db.insert(userIntents).values(
       intents.map((intentId) => ({ userId, intentId })),
-    ).run();
+    );
   }
 }
 
-export function resetUserWorkspace(userId: string): void {
+export async function resetUserWorkspace(userId: string): Promise<void> {
   const db = getDb();
 
-  db.transaction((tx) => {
-    tx.delete(tasks).where(eq(tasks.userId, userId)).run();
-    tx.delete(sessions).where(eq(sessions.userId, userId)).run();
-    tx.delete(usualWeekBlocks).where(eq(usualWeekBlocks.userId, userId)).run();
-    tx.delete(areas).where(eq(areas.userId, userId)).run();
-    tx.delete(userIntents).where(eq(userIntents.userId, userId)).run();
-    tx.update(users)
+  await db.transaction(async (tx) => {
+    await tx.delete(tasks).where(eq(tasks.userId, userId));
+    await tx.delete(sessions).where(eq(sessions.userId, userId));
+    await tx.delete(usualWeekBlocks).where(eq(usualWeekBlocks.userId, userId));
+    await tx.delete(areas).where(eq(areas.userId, userId));
+    await tx.delete(userIntents).where(eq(userIntents.userId, userId));
+    await tx
+      .update(users)
       .set({
         onboardingComplete: false,
         timeWindow: "today",
         updatedAt: new Date(),
       })
-      .where(eq(users.id, userId))
-      .run();
+      .where(eq(users.id, userId));
   });
 
-  seedUserWorkspace(userId);
+  await seedUserWorkspace(userId);
 }

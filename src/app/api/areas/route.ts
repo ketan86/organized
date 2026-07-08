@@ -10,7 +10,7 @@ export async function PUT(request: Request) {
   try {
     const userId = await requireSessionUserId();
     const body = (await request.json()) as AreasSetupInput;
-    saveAreasSetup(userId, body);
+    await saveAreasSetup(userId, body);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return jsonError(error, "Failed to save areas");

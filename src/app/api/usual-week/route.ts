@@ -10,7 +10,7 @@ export async function PUT(request: Request) {
   try {
     const userId = await requireSessionUserId();
     const body = (await request.json()) as { blocks: UsualWeekBlock[] };
-    saveUsualWeek(userId, body.blocks ?? []);
+    await saveUsualWeek(userId, body.blocks ?? []);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return jsonError(error, "Failed to save schedule");
