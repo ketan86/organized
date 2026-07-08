@@ -1,6 +1,7 @@
 "use client";
 
 import { OnboardingChrome } from "@/components/onboarding/OnboardingChrome";
+import { ShieldIcon } from "@/components/ui/ShieldIcon";
 import {
   DAY_HOURS,
   formatHours,
@@ -43,7 +44,7 @@ export function ReviewScreen({
     <OnboardingChrome
       step={4}
       totalSteps={4}
-      title="This is your life map"
+      title="Your life areas"
       subtitle="Protected areas won’t be cut when you’re overloaded."
       onBack={onBack}
       footer={
@@ -149,21 +150,5 @@ export function ReviewScreen({
         })}
       </div>
     </OnboardingChrome>
-  );
-}
-
-function ShieldIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden
-    >
-      <path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z" />
-    </svg>
   );
 }

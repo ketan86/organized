@@ -117,8 +117,8 @@ export function AreasScreen({
       </div>
 
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-app-overlay sm:absolute sm:rounded-[2.5rem]">
-          <div className="w-full max-w-[390px] rounded-t-3xl border border-app bg-app-elevated p-6 pb-10">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-app-overlay lg:items-center lg:p-8">
+          <div className="w-full max-w-md rounded-t-3xl bg-app-elevated p-6 pb-10 lg:rounded-3xl lg:p-8">
             <h3 className="text-lg font-semibold text-app">New life area</h3>
             <p className="mt-1 text-sm text-app-muted">
               e.g. Faith, Side project, Dog
@@ -129,16 +129,16 @@ export function AreasScreen({
               onChange={(e) => setCustomName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAdd()}
               placeholder="Area name"
-              className="mt-4 w-full rounded-2xl border border-app bg-app-input px-4 py-3.5 text-[15px] text-app outline-none placeholder-app focus:border-app-accent"
+              className="mt-4 w-full rounded-2xl bg-app-input px-4 py-3.5 text-[15px] text-app outline-none placeholder-app focus:ring-2 focus:ring-violet-500/30"
             />
-            <div className="mt-4 flex gap-3">
+            <div className="mt-5 flex items-center gap-4">
               <button
                 type="button"
                 onClick={() => {
                   setShowAdd(false);
                   setCustomName("");
                 }}
-                className="flex-1 rounded-2xl border border-app py-3 text-sm font-medium text-app-secondary"
+                className="text-sm font-medium text-app-muted transition hover:text-app-secondary"
               >
                 Cancel
               </button>
@@ -146,7 +146,7 @@ export function AreasScreen({
                 type="button"
                 onClick={handleAdd}
                 disabled={!customName.trim()}
-                className="flex-1 rounded-2xl bg-violet-500 py-3 text-sm font-semibold text-white disabled:opacity-40"
+                className="ml-auto rounded-2xl bg-violet-500 px-6 py-3 text-sm font-semibold text-white disabled:opacity-40"
               >
                 Add
               </button>

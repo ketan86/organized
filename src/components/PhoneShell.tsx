@@ -8,9 +8,9 @@ export function PhoneShell({
   overlay?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-full items-center justify-center bg-app-shell p-4 sm:p-8">
-      <div className="relative h-[100dvh] w-full max-w-[390px] overflow-hidden border-app bg-app text-app shadow-2xl shadow-black/20 sm:h-[844px] sm:rounded-[2.5rem] sm:border">
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-11 items-end justify-between px-6 pb-1 text-[11px] font-medium text-app-status">
+    <div className="flex min-h-full items-center justify-center bg-app p-4 lg:p-8">
+      <div className="relative h-[100dvh] w-full max-w-[390px] overflow-hidden bg-app text-app lg:h-full lg:max-w-none lg:shadow-none">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-11 items-end justify-between px-6 pb-1 text-[11px] font-medium text-app-status lg:hidden">
           <span>9:41</span>
           <div className="flex items-center gap-1.5">
             <span className="inline-block h-2 w-4 rounded-sm bg-app-status" />
@@ -19,7 +19,7 @@ export function PhoneShell({
           </div>
         </div>
 
-        <div className="pointer-events-none absolute left-1/2 top-2 z-20 hidden h-7 w-28 -translate-x-1/2 rounded-full bg-black/80 sm:block" />
+        <div className="pointer-events-none absolute left-1/2 top-2 z-20 hidden h-7 w-28 -translate-x-1/2 rounded-full bg-black/80 sm:block lg:hidden" />
 
         <div className="h-full overflow-y-auto overscroll-contain">{children}</div>
 

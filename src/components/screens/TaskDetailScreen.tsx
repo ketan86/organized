@@ -1,16 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import {
-  DMV_CAPTURE_SUGGESTION,
   dueLabel,
   formatElapsed,
+  formatHours,
   formatMinutes,
+  getAreaProgress,
+  isCompletedOnDate,
   isRecurring,
   RECURRENCE_OPTIONS,
-  REMINDER_OPTIONS,
   reminderLabel,
   scheduleLabel,
   scheduleOptions,
+  taskGoalCreditPct,
   todayKey,
   type AreaDef,
   type BuyTimeOption,
@@ -18,13 +21,19 @@ import {
   type Reminder,
   type Session,
   type Task,
+  type TimeWindow,
+  type UsualWeekBlock,
 } from "@/lib/mock-data";
+import { ReminderPicker } from "@/components/ui/ReminderPicker";
 import { useElapsed } from "@/hooks/useElapsed";
 
 type TaskDetailScreenProps = {
   task: Task;
   area: AreaDef;
-  budgetHours: number;
+  usualWeek: UsualWeekBlock[];
+  tasks: Task[];
+  sessions: Session[];
+  window: TimeWindow;
   occurrenceDate?: string | null;
   runningSession: Session | null;
   onBack: () => void;
@@ -33,6 +42,7 @@ type TaskDetailScreenProps = {
   onReminder: (taskId: string, reminder: Reminder) => void;
   onBuyTime: (taskId: string, option: BuyTimeOption) => void;
   onMarkDone: (taskId: string, occurrenceDate?: string) => void;
+  onDelete: (taskId: string) => void;
   onStartTracking: (taskId: string) => void;
   onStopTracking: () => void;
 };
@@ -40,7 +50,10 @@ type TaskDetailScreenProps = {
 export function TaskDetailScreen({
   task,
   area,
-  budgetHours,
+  usualWeek,
+  tasks,
+  sessions,
+  window,
   occurrenceDate,
   runningSession,
   onBack,
@@ -49,15 +62,14 @@ export function TaskDetailScreen({
   onReminder,
   onBuyTime,
   onMarkDone,
+  onDelete,
   onStartTracking,
   onStopTracking,
 }: TaskDetailScreenProps) {
-  const isDmv =
-    task.id === "task-dmv" || task.title.toLowerCase().includes("dmv");
-  const planSteps = isDmv ? DMV_CAPTURE_SUGGESTION.planSteps : [];
-  const buyOptions = isDmv ? DMV_CAPTURE_SUGGESTION.buyTimeOptions : [];
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const due = dueLabel(task);
   const activeOccurrence = occurrenceDate ?? todayKey();
+  const occurrenceCompleted = isCompletedOnDate(task, activeOccurrence);
   const isTrackingHere =
     runningSession?.targetType === "task" &&
     runningSession.targetId === task.id;
@@ -65,6 +77,9 @@ export function TaskDetailScreen({
     isTrackingHere ? runningSession.startedAt : null,
     isTrackingHere,
   );
+  const progress = getAreaProgress(area, usualWeek, tasks, sessions, window);
+  const goalCreditPct = taskGoalCreditPct(task, progress);
+  const budgetHours = progress.plannedHours || 1;
   const overDaily =
     task.status === "open" &&
     !isRecurring(task) &&
@@ -127,7 +142,7 @@ export function TaskDetailScreen({
             Bought time
           </span>
         )}
-        {task.status === "done" && (
+        {(task.status === "done" || occurrenceCompleted) && (
           <span className="rounded-full bg-app-chip px-3 py-1.5 text-xs font-medium text-app-muted">
             Done
           </span>
@@ -145,7 +160,7 @@ export function TaskDetailScreen({
         <p className="mb-5 text-sm leading-relaxed text-app-muted">{task.notes}</p>
       )}
 
-      {task.status === "open" && (
+      {task.status === "open" && !occurrenceCompleted && (
         <div
           className={`mb-5 rounded-2xl border p-4 ${
             isTrackingHere
@@ -189,7 +204,7 @@ export function TaskDetailScreen({
         </div>
       )}
 
-      {task.status === "open" && !isRecurring(task) && (
+      {task.status === "open" && !isRecurring(task) && !occurrenceCompleted && (
         <div className="mb-5">
           <h2 className="text-sm font-medium text-app-secondary">Schedule</h2>
           <p className="mt-1 text-xs text-app-muted">
@@ -220,7 +235,7 @@ export function TaskDetailScreen({
         </div>
       )}
 
-      {task.status === "open" && (
+      {task.status === "open" && !occurrenceCompleted && (
         <div className="mb-5">
           <h2 className="text-sm font-medium text-app-secondary">Repeat</h2>
           <p className="mt-1 text-xs text-app-muted">
@@ -248,118 +263,117 @@ export function TaskDetailScreen({
         </div>
       )}
 
-      {task.status === "open" && (
+      {task.status === "open" && !occurrenceCompleted && (
         <div className="mb-5">
           <h2 className="text-sm font-medium text-app-secondary">Reminder</h2>
-          <p className="mt-1 text-xs text-app-muted">
-            Prototype only — no real notifications yet.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {REMINDER_OPTIONS.map((opt) => {
-              const active = (task.reminder ?? "none") === opt.id;
-              return (
+          <div className="mt-3">
+            <ReminderPicker
+              value={task.reminder ?? "none"}
+              recurring={(task.recurrence ?? "none") !== "none"}
+              defaultDateKey={task.scheduledDate ?? task.dueDate ?? todayKey()}
+              onChange={(r) => onReminder(task.id, r)}
+            />
+          </div>
+        </div>
+      )}
+
+      {task.status === "open" && !occurrenceCompleted && (
+        <div className="mt-auto space-y-3">
+          {progress.plannedHours > 0 && goalCreditPct > 0 && (
+            <div className="rounded-2xl border border-app-accent bg-app-accent-soft px-3.5 py-3 text-sm text-app-accent">
+              Completing adds{" "}
+              <span className="font-semibold">{goalCreditPct}%</span> toward{" "}
+              {area.name}&apos;s {window === "today" ? "daily" : "weekly"} goal (
+              {formatHours(progress.plannedHours)})
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() =>
+              onMarkDone(
+                task.id,
+                isRecurring(task) ? activeOccurrence : undefined,
+              )
+            }
+            className="w-full rounded-2xl bg-violet-500 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/20"
+          >
+            {isRecurring(task) ? "Complete today's occurrence" : "Mark done"}
+          </button>
+          {!confirmDelete ? (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="w-full py-2 text-sm font-medium text-app-warning-soft"
+            >
+              Delete task
+            </button>
+          ) : (
+            <div className="rounded-2xl border border-app-warning bg-app-warning px-3.5 py-3">
+              <p className="text-sm text-app-warning-soft">
+                Delete this task permanently?
+              </p>
+              <div className="mt-3 flex gap-2">
                 <button
-                  key={opt.id}
                   type="button"
-                  onClick={() => onReminder(task.id, opt.id)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition active:scale-95 ${
-                    active
-                      ? "bg-violet-500 text-white"
-                      : "border border-app bg-app-card text-app-secondary"
-                  }`}
+                  onClick={() => setConfirmDelete(false)}
+                  className="flex-1 rounded-xl border border-app py-2.5 text-sm font-medium text-app-secondary"
                 >
-                  {opt.label}
+                  Cancel
                 </button>
-              );
-            })}
-          </div>
+                <button
+                  type="button"
+                  onClick={() => onDelete(task.id)}
+                  className="flex-1 rounded-xl bg-red-500/90 py-2.5 text-sm font-semibold text-white"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {planSteps.length > 0 && task.status === "open" && (
-        <div className="mb-5">
-          <h2 className="text-sm font-medium text-app-secondary">AI plan</h2>
-          <ul className="mt-2 space-y-2">
-            {planSteps.map((step, i) => (
-              <li
-                key={step.title}
-                className="rounded-2xl border border-app bg-app-card px-3.5 py-3"
-              >
-                <div className="flex items-start gap-2.5">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-app-accent-soft text-[11px] font-medium text-app-accent">
-                    {i + 1}
-                  </span>
-                  <div>
-                    <p className="text-sm font-medium text-app">{step.title}</p>
-                    {step.detail && (
-                      <p className="mt-0.5 text-xs text-app-muted">{step.detail}</p>
-                    )}
-                    <p className="mt-1 text-[11px] text-app-faint">
-                      {formatMinutes(step.estimateMinutes)}
-                    </p>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+      {(task.status !== "open" || occurrenceCompleted) && (
+        <div className="mt-auto space-y-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="w-full rounded-2xl bg-app-chip py-3.5 text-sm font-medium text-app"
+          >
+            Back to {area.name}
+          </button>
+          {!confirmDelete ? (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="w-full py-2 text-sm font-medium text-app-warning-soft"
+            >
+              Delete task
+            </button>
+          ) : (
+            <div className="rounded-2xl border border-app-warning bg-app-warning px-3.5 py-3">
+              <p className="text-sm text-app-warning-soft">
+                Delete this task permanently?
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="flex-1 rounded-xl border border-app py-2.5 text-sm font-medium text-app-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(task.id)}
+                  className="flex-1 rounded-xl bg-red-500/90 py-2.5 text-sm font-semibold text-white"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-
-      {buyOptions.length > 0 && task.status === "open" && (
-        <div className="mb-5">
-          <h2 className="text-sm font-medium text-app-secondary">Buy time</h2>
-          <p className="mt-1 text-xs text-app-muted">
-            Spend money to protect what matters.
-          </p>
-          <div className="mt-3 space-y-2">
-            {buyOptions.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => onBuyTime(task.id, option)}
-                className="w-full rounded-2xl border border-app-success bg-app-success px-4 py-3.5 text-left transition active:scale-[0.99]"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold text-app">{option.title}</p>
-                  <span className="shrink-0 text-xs font-medium text-app-success">
-                    {option.costLabel}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs leading-relaxed text-app-muted">
-                  {option.description}
-                </p>
-                <p className="mt-2 text-[11px] font-medium text-app-success-soft">
-                  Saves ~{formatMinutes(option.timeSavedMinutes)}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {task.status === "open" && (
-        <button
-          type="button"
-          onClick={() =>
-            onMarkDone(
-              task.id,
-              isRecurring(task) ? activeOccurrence : undefined,
-            )
-          }
-          className="mt-auto w-full rounded-2xl border border-app py-3.5 text-sm font-medium text-app-secondary"
-        >
-          {isRecurring(task) ? "Complete today’s occurrence" : "Mark done"}
-        </button>
-      )}
-
-      {task.status !== "open" && (
-        <button
-          type="button"
-          onClick={onBack}
-          className="mt-auto w-full rounded-2xl bg-app-chip py-3.5 text-sm font-medium text-app"
-        >
-          Back to {area.name}
-        </button>
       )}
     </div>
   );

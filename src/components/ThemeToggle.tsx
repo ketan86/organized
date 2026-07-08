@@ -16,8 +16,8 @@ export function ThemeToggle({
     <button
       type="button"
       onClick={toggleTheme}
-      className={`flex h-9 items-center justify-center gap-1.5 rounded-full border border-app bg-app-card text-[11px] font-medium text-app-secondary transition active:scale-95 ${
-        compact ? "w-9 px-0" : "px-2.5"
+      className={`flex h-8 items-center justify-center gap-1.5 rounded-[var(--radius-control)] border border-app bg-app-card text-[11px] font-medium text-app-secondary transition active:scale-95 ${
+        compact ? "w-8 px-0" : "px-2.5"
       } ${className}`}
       aria-label={isDark ? "Switch to day mode" : "Switch to night mode"}
       title={isDark ? "Day mode" : "Night mode"}

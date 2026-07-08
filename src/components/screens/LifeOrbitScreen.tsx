@@ -3,20 +3,23 @@
 import { useMemo, type ReactNode } from "react";
 import {
   buildCoachInsight,
-  buildPlanActual,
   centerReadout,
-  daysPatternLabel,
+  formatAreaProgressSummary,
   formatElapsed,
-  formatHours,
+  getAllAreaProgress,
   getAreaPressure,
   plannedHoursForArea,
+  progressRollup,
   type AreaDef,
+  type AreaProgress,
   type IntentId,
   type Session,
   type Task,
   type TimeWindow,
+  type UsualWeekBlock,
 } from "@/lib/mock-data";
-import type { AreaWeight } from "./onboarding/WeightageScreen";
+import { AreaProgressBar } from "@/components/AreaProgressBar";
+import { ProgressRing } from "@/components/ProgressRing";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useElapsed } from "@/hooks/useElapsed";
 
@@ -32,47 +35,24 @@ function SectionTitle({ children }: { children: ReactNode }) {
   );
 }
 
-/** Angle: 0° at top, clockwise (matches budget pie). */
-function piePoint(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = (angleDeg * Math.PI) / 180;
-  return {
-    x: cx + r * Math.sin(rad),
-    y: cy - r * Math.cos(rad),
-  };
-}
-
-function pieDonutPath(
-  cx: number,
-  cy: number,
-  rOuter: number,
-  rInner: number,
-  startAngle: number,
-  sweep: number,
-): string {
-  const endAngle = startAngle + sweep;
-  const large = sweep > 180 ? 1 : 0;
-  const o1 = piePoint(cx, cy, rOuter, startAngle);
-  const o2 = piePoint(cx, cy, rOuter, endAngle);
-  const i1 = piePoint(cx, cy, rInner, endAngle);
-  const i2 = piePoint(cx, cy, rInner, startAngle);
-  return [
-    `M ${o1.x} ${o1.y}`,
-    `A ${rOuter} ${rOuter} 0 ${large} 1 ${o2.x} ${o2.y}`,
-    `L ${i1.x} ${i1.y}`,
-    `A ${rInner} ${rInner} 0 ${large} 0 ${i2.x} ${i2.y}`,
-    "Z",
-  ].join(" ");
+function AccountIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+    </svg>
+  );
 }
 
 type OrbitItem = AreaDef & {
   hours: number;
+  progress: AreaProgress;
   pressure: ReturnType<typeof getAreaPressure>;
 };
 
 type LifeOrbitScreenProps = {
   areas: AreaDef[];
-  weights: AreaWeight[];
-  protectedIds: string[];
+  usualWeek: UsualWeekBlock[];
   intents: IntentId[];
   tasks: Task[];
   sessions: Session[];
@@ -83,15 +63,18 @@ type LifeOrbitScreenProps = {
   onOpenTask?: (taskId: string) => void;
   onCapture: () => void;
   onOpenCalendar: () => void;
+  onOpenAccount: () => void;
+  onStartTracking: (areaId: string) => void;
   onStopTracking: () => void;
   onSwitchTracking: () => void;
   switchNotice: string | null;
+  progressNotice: string | null;
+  embedded?: boolean;
 };
 
 export function LifeOrbitScreen({
   areas,
-  weights,
-  protectedIds,
+  usualWeek,
   intents,
   tasks,
   sessions,
@@ -102,23 +85,22 @@ export function LifeOrbitScreen({
   onOpenTask,
   onCapture,
   onOpenCalendar,
+  onOpenAccount,
+  onStartTracking,
   onStopTracking,
   onSwitchTracking,
   switchNotice,
+  progressNotice,
+  embedded = false,
 }: LifeOrbitScreenProps) {
-  const pressures = useMemo(
-    () =>
-      areas.map((area) => {
-        const hours =
-          weights.find((w) => w.id === area.id)?.hours ?? area.defaultHours;
-        return getAreaPressure(area, hours, tasks, window);
-      }),
-    [areas, weights, tasks, window],
+  const progresses = useMemo(
+    () => getAllAreaProgress(areas, usualWeek, tasks, sessions, window),
+    [areas, usualWeek, tasks, sessions, window],
   );
 
-  const planActual = useMemo(
-    () => buildPlanActual(areas, weights, sessions, window),
-    [areas, weights, sessions, window],
+  const progressByArea = useMemo(
+    () => new Map(progresses.map((p) => [p.areaId, p])),
+    [progresses],
   );
 
   const runningLabel = useMemo(() => {
@@ -142,55 +124,58 @@ export function LifeOrbitScreen({
 
   const items = useMemo(
     () =>
-      weights
-        .map((w) => {
-          const area = areas.find((a) => a.id === w.id);
-          const pressure = pressures.find((p) => p.areaId === w.id);
-          if (!area || !pressure) return null;
-          const hours = plannedHoursForArea(area, w.hours, window);
-          return { ...area, hours, pressure };
+      areas
+        .map((area) => {
+          const progress = progressByArea.get(area.id);
+          if (!progress) return null;
+          const hours = plannedHoursForArea(usualWeek, area.id, window);
+          const pressure = getAreaPressure(area, usualWeek, tasks, window);
+          return { ...area, hours, progress, pressure };
         })
         .filter(Boolean) as OrbitItem[],
-    [weights, areas, pressures, window],
+    [areas, progressByArea, usualWeek, tasks, window],
   );
 
-  const pieItems = useMemo(
+  const activeItems = useMemo(
     () => items.filter((i) => i.hours > 0),
     [items],
   );
 
-  const insight = buildCoachInsight(pressures, areas, intents);
-  const readout = centerReadout(pressures, areas);
+  const insight = buildCoachInsight(progresses, areas, intents, window);
+  const readout = centerReadout(progresses, areas, window);
+  const rollup = progressRollup(progresses);
   const windowLabel = window === "today" ? "Today" : "This week";
 
-  const totalBudget = pieItems.reduce((s, i) => s + i.hours, 0) || 1;
-  let cursor = 0;
-  const segments = pieItems.map((item) => {
-    const start = cursor;
-    const sweep = (item.hours / totalBudget) * 360;
-    cursor += sweep;
-    const pct = Math.round((item.hours / totalBudget) * 100);
-    return { item, start, sweep, pct };
+  const overallPct = useMemo(() => {
+    if (activeItems.length === 0) return 0;
+    const sum = activeItems.reduce((s, i) => s + i.progress.progressPct, 0);
+    return Math.round(sum / activeItems.length);
+  }, [activeItems]);
+
+  const sortedRows = [...activeItems].sort((a, b) => {
+    if (a.progress.overloaded !== b.progress.overloaded) {
+      return a.progress.overloaded ? -1 : 1;
+    }
+    if (a.progress.goalMet !== b.progress.goalMet) {
+      return a.progress.goalMet ? 1 : -1;
+    }
+    return a.progress.progressRatio - b.progress.progressRatio;
   });
 
-  const sortedBars = [...items].sort(
-    (a, b) => b.pressure.ratio - a.pressure.ratio,
-  );
-
-  const pieSize = 220;
-  const pieCx = pieSize / 2;
-  const pieCy = pieSize / 2;
-  const pieOuter = 100;
-  const pieInner = 52;
-  const pieLabelR = (pieOuter + pieInner) / 2;
+  const heroFill =
+    rollup.withGoal > 0 && rollup.goalsMet === rollup.withGoal
+      ? "var(--success-text)"
+      : rollup.overloaded > 0
+        ? "#fbbf24"
+        : "var(--accent)";
 
   return (
-    <div className="relative flex min-h-full flex-col px-5 pb-28 pt-14">
+    <div className={`relative flex min-h-full flex-col ${embedded ? "px-4 pb-8 pt-4" : "px-5 pb-28 pt-14"}`}>
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="animate-pulse-soft absolute left-1/2 top-[18%] h-48 w-48 -translate-x-1/2 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="animate-pulse-soft absolute left-1/2 top-[18%] h-48 w-48 -translate-x-1/2 rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] blur-3xl" />
       </div>
 
-      {/* Header */}
+      {!embedded && (
       <div className="relative z-10 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-app-faint">
@@ -199,30 +184,43 @@ export function LifeOrbitScreen({
           <h1 className="mt-0.5 text-lg font-semibold text-app">Organized</h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <ThemeToggle compact />
-          <div className="flex rounded-full border border-app bg-app-card p-0.5">
+          <div className="btn-segment">
             {(["today", "week"] as const).map((w) => (
               <button
                 key={w}
                 type="button"
                 onClick={() => onWindowChange(w)}
-                className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition ${
-                  window === w
-                    ? "bg-app-chip text-app"
-                    : "text-app-muted"
+                className={`btn-segment-item ${
+                  window === w ? "btn-segment-item-active" : ""
                 }`}
               >
                 {w === "today" ? "Today" : "Week"}
               </button>
             ))}
           </div>
+          <ThemeToggle compact />
+          <button
+            type="button"
+            onClick={onOpenAccount}
+            className="btn-icon border border-app bg-app-card"
+            aria-label="Account"
+          >
+            <AccountIcon />
+          </button>
         </div>
       </div>
+      )}
 
-      {/* Switch confirmation */}
+
       {switchNotice && (
         <div className="relative z-10 mt-3 rounded-2xl border border-app bg-app-card px-3.5 py-2.5 text-sm text-app">
           {switchNotice}
+        </div>
+      )}
+
+      {progressNotice && (
+        <div className="progress-notice relative z-10 mt-3 rounded-2xl border border-app-success bg-app-success px-3.5 py-2.5 text-sm text-app-success">
+          {progressNotice}
         </div>
       )}
 
@@ -264,14 +262,14 @@ export function LifeOrbitScreen({
             <button
               type="button"
               onClick={onSwitchTracking}
-              className="flex-1 rounded-xl border border-app bg-app px-3 py-2 text-xs font-semibold text-app-accent"
+              className="btn-secondary btn-sm flex-1"
             >
               Switch
             </button>
             <button
               type="button"
               onClick={onStopTracking}
-              className="flex-1 rounded-xl bg-violet-500 px-3 py-2 text-xs font-semibold text-white"
+              className="btn-primary btn-sm flex-1"
             >
               Stop
             </button>
@@ -283,226 +281,137 @@ export function LifeOrbitScreen({
         </div>
       )}
 
-      {/* Pie — budget share */}
+      {/* Hero ring — overall progress */}
       <div className="relative z-10 mt-4 flex flex-col items-center">
-        <p className="mb-2 text-[10px] uppercase tracking-wider text-app-faint">
-          {windowLabel} · budget mix
+        <p className="mb-3 text-[10px] uppercase tracking-wider text-app-faint">
+          {windowLabel} · goal progress
         </p>
-        <div
-          className="relative"
-          style={{ width: pieSize, height: pieSize }}
-        >
-          {pieItems.length === 0 ? (
-            <div className="flex h-full items-center justify-center rounded-full border border-app bg-app-card px-6 text-center">
-              <p className="text-sm text-app-muted">
-                Nothing planned for {windowLabel.toLowerCase()}
-              </p>
-            </div>
-          ) : (
-          <svg
-            width={pieSize}
-            height={pieSize}
-            viewBox={`0 0 ${pieSize} ${pieSize}`}
-            className="overflow-visible"
-          >
-            {segments.map(({ item, start, sweep, pct }) => {
-              const color = item.pressure.overloaded ? "#fbbf24" : item.color;
-              // Full circle edge case
-              const safeSweep = Math.min(sweep, 359.99);
-              if (safeSweep <= 0.01) return null;
 
-              const mid = start + sweep / 2;
-              const label = piePoint(pieCx, pieCy, pieLabelR, mid);
-              const showLabel = pct >= 5 && sweep >= 18;
-
-              return (
-                <g key={item.id}>
-                  <path
-                    d={pieDonutPath(
-                      pieCx,
-                      pieCy,
-                      pieOuter,
-                      pieInner,
-                      start,
-                      safeSweep,
-                    )}
-                    fill={color}
-                    className="cursor-pointer transition-opacity hover:opacity-90"
-                    onClick={() => onOpenArea(item.id)}
-                  />
-                  {showLabel && (
-                    <g
-                      className="cursor-pointer"
-                      onClick={() => onOpenArea(item.id)}
-                    >
-                      <text
-                        x={label.x}
-                        y={label.y - 5}
-                        textAnchor="middle"
-                        fill="#fff"
-                        fontSize="11"
-                        fontWeight="600"
-                        style={{
-                          paintOrder: "stroke",
-                          stroke: "rgba(0,0,0,0.5)",
-                          strokeWidth: 3,
-                        }}
-                      >
-                        {item.name}
-                      </text>
-                      <text
-                        x={label.x}
-                        y={label.y + 9}
-                        textAnchor="middle"
-                        fill="#fff"
-                        fontSize="10"
-                        fontWeight="500"
-                        style={{
-                          paintOrder: "stroke",
-                          stroke: "rgba(0,0,0,0.5)",
-                          strokeWidth: 3,
-                        }}
-                      >
-                        {pct}%
-                      </text>
-                    </g>
-                  )}
-                </g>
-              );
-            })}
-            <circle
-              cx={pieCx}
-              cy={pieCy}
-              r={pieInner - 1}
-              style={{ fill: "var(--pie-center)" }}
-            />
-          </svg>
-          )}
-          {pieItems.length > 0 && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-10 text-center">
-            <p className="max-w-[100px] text-[12px] font-semibold leading-snug text-app">
-              {readout}
+        {activeItems.length === 0 ? (
+          <div className="flex h-36 w-36 items-center justify-center rounded-full border border-app bg-app-card px-6 text-center">
+            <p className="text-sm text-app-muted">
+              Nothing planned for {windowLabel.toLowerCase()}
             </p>
           </div>
-          )}
-        </div>
+        ) : (
+          <>
+            <ProgressRing
+              size={144}
+              strokeWidth={10}
+              progressPct={overallPct}
+              fillColor={heroFill}
+            >
+              <p className="text-2xl font-bold tabular-nums text-app">
+                {overallPct}%
+              </p>
+              {rollup.withGoal > 0 && (
+                <p className="mt-0.5 text-[10px] font-medium text-app-muted">
+                  {rollup.goalsMet}/{rollup.withGoal} goals
+                </p>
+              )}
+            </ProgressRing>
+            <p className="mt-3 max-w-[220px] text-center text-xs font-medium leading-snug text-app-secondary">
+              {readout}
+            </p>
+          </>
+        )}
       </div>
 
-      {/* Per life part: tasks + tracked time */}
+      {/* Life part rows */}
       <div className="relative z-10 mt-6">
         <SectionTitle>
           {window === "today" ? "Today" : "This week"}
         </SectionTitle>
-        <p className="mb-3 text-center text-[11px] leading-relaxed text-app-muted">
-          Tasks on your plate, and time from Start / Stop, vs hours you set.
-        </p>
         <div className="flex flex-col gap-2">
-          {sortedBars.map((item) => {
-            const fill = Math.min(item.pressure.ratio * 100, 100);
-            const overloaded = item.pressure.overloaded;
-            const isProtected = protectedIds.includes(item.id);
-            const room = item.pressure.capacity - item.pressure.load;
-            const tracked = planActual.find((r) => r.areaId === item.id);
-            const actualHours = tracked?.actualHours ?? 0;
-            const plannedHours =
-              tracked?.plannedHours ?? item.pressure.capacity;
-            const trackDelta = actualHours - plannedHours;
-            const trackOver = trackDelta > 0.08;
-            const trackUnder = trackDelta < -0.08 && plannedHours > 0;
+          {sortedRows.map((item) => {
+            const summary = formatAreaProgressSummary(item.progress);
+            const trackingHere =
+              runningSession != null && runningSession.areaId === item.id;
 
             return (
-              <button
+              <div
                 key={item.id}
-                type="button"
-                onClick={() => onOpenArea(item.id)}
-                className="rounded-2xl border border-app bg-app-card px-3 py-3 text-left transition active:scale-[0.99]"
+                className={`rounded-2xl border bg-app-card px-3 py-3 ${
+                  trackingHere ? "border-app-accent" : "border-app"
+                }`}
               >
-                <div className="mb-2 flex items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="truncate text-sm font-medium text-app">
-                    {item.name}
-                  </span>
-                  {isProtected && (
-                    <span className="rounded-full bg-app-success px-1.5 py-0.5 text-[9px] font-medium text-app-success">
-                      protected
-                    </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onOpenArea(item.id)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left transition active:scale-[0.99]"
+                  >
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-app">
+                          {item.name}
+                        </p>
+                        <span
+                          className={`shrink-0 text-xs font-semibold tabular-nums ${
+                            item.progress.goalMet
+                              ? "text-app-success"
+                              : item.progress.overloaded
+                                ? "text-app-warning"
+                                : "text-app-muted"
+                          }`}
+                        >
+                          {item.progress.progressPct}%
+                        </span>
+                      </div>
+                      <AreaProgressBar
+                        progressPct={item.progress.progressPct}
+                        color={item.color}
+                        goalMet={item.progress.goalMet}
+                        overloaded={item.progress.overloaded}
+                        className="mt-2"
+                      />
+                      <p
+                        className={`mt-1.5 truncate text-xs ${
+                          item.progress.overloaded
+                            ? "text-app-warning"
+                            : item.progress.goalMet
+                              ? "text-app-success"
+                              : "text-app-muted"
+                        }`}
+                      >
+                        {summary}
+                      </p>
+                    </div>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="shrink-0 self-center text-app-faint"
+                    >
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
+                  </button>
+                  {trackingHere ? (
+                    <button
+                      type="button"
+                      onClick={onStopTracking}
+                      className="btn-primary btn-sm shrink-0"
+                    >
+                      Stop
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onStartTracking(item.id)}
+                      className="btn-secondary btn-sm shrink-0"
+                    >
+                      Start
+                    </button>
                   )}
                 </div>
-
-                <div className="space-y-1 text-[11px] text-app-muted">
-                  <p>
-                    You set:{" "}
-                    <span className="font-medium text-app">
-                      {plannedHours > 0
-                        ? formatHours(plannedHours)
-                        : "nothing today"}
-                    </span>
-                    <span className="text-app-faint">
-                      {" "}
-                      · {daysPatternLabel(item.daysPattern)}
-                    </span>
-                  </p>
-                  <p>
-                    Open tasks:{" "}
-                    <span className="font-medium text-app">
-                      {formatHours(item.pressure.load)}
-                    </span>
-                    <span
-                      className={
-                        overloaded ? "text-app-warning" : "text-app-faint"
-                      }
-                    >
-                      {plannedHours <= 0
-                        ? item.pressure.load > 0
-                          ? " · tasks on a day with no plan"
-                          : " · no plan today"
-                        : overloaded
-                          ? ` · ${formatHours(item.pressure.load - item.pressure.capacity)} more than planned`
-                          : room > 0.05
-                            ? ` · ${formatHours(room)} room left`
-                            : " · matches plan"}
-                    </span>
-                  </p>
-                  <p>
-                    You tracked:{" "}
-                    <span className="font-medium text-app">
-                      {formatHours(actualHours)}
-                    </span>
-                    <span
-                      className={
-                        trackOver
-                          ? "text-app-warning"
-                          : trackUnder
-                            ? "text-app-accent"
-                            : "text-app-faint"
-                      }
-                    >
-                      {plannedHours <= 0
-                        ? actualHours > 0
-                          ? " · extra (not on today’s plan)"
-                          : " · none"
-                        : trackOver
-                          ? ` · ${formatHours(trackDelta)} longer than planned`
-                          : trackUnder
-                            ? ` · ${formatHours(-trackDelta)} still available`
-                            : " · on plan"}
-                    </span>
-                  </p>
-                </div>
-
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-app-input">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${fill}%`,
-                      backgroundColor: overloaded ? "#fbbf24" : item.color,
-                    }}
-                  />
-                </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -532,7 +441,8 @@ export function LifeOrbitScreen({
       </div>
 
       {/* Bottom tabs */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 flex border-t border-app bg-app-nav px-6 pb-6 pt-2 backdrop-blur">
+      {!embedded && (
+      <div className="absolute bottom-0 left-0 right-0 z-20 flex border-t border-app bg-app-nav px-6 pb-6 pt-2 backdrop-blur lg:hidden">
         <button
           type="button"
           className="flex flex-1 flex-col items-center gap-0.5 py-1 text-app-accent"
@@ -543,8 +453,8 @@ export function LifeOrbitScreen({
         <button
           type="button"
           onClick={onCapture}
-          className="-mt-5 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-violet-500 to-violet-400 text-xl font-semibold text-white shadow-lg shadow-violet-500/30"
-          aria-label="Dump it"
+          className="fab-primary -mt-5"
+          aria-label="Capture"
         >
           +
         </button>
@@ -557,6 +467,7 @@ export function LifeOrbitScreen({
           <span className="text-[10px] font-medium">Calendar</span>
         </button>
       </div>
+      )}
     </div>
   );
 }

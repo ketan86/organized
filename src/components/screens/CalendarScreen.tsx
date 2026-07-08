@@ -3,13 +3,17 @@
 import { useMemo, useState } from "react";
 import {
   addDays,
-  areaAppliesOnDate,
+  blocksOnDate,
   blocksSummary,
   blockTimelineRanges,
   formatDateLabel,
   formatMinutes,
+  formatTimeLabel,
   isBacklogTask,
+  isCompletedOnDate,
   isRecurring,
+  occursOnDate,
+  plannedHoursForArea,
   reminderLabel,
   scheduleLabel,
   tasksOnDate,
@@ -17,18 +21,20 @@ import {
   weekRange,
   type AreaDef,
   type Task,
+  type UsualWeekBlock,
 } from "@/lib/mock-data";
-import type { AreaWeight } from "./onboarding/WeightageScreen";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 type CalendarScreenProps = {
   areas: AreaDef[];
-  weights: AreaWeight[];
+  usualWeek: UsualWeekBlock[];
   tasks: Task[];
   onOpenTask: (taskId: string, occurrenceDate?: string) => void;
   onScheduleTask: (taskId: string, scheduledDate: string | null) => void;
   onCapture: () => void;
   onOpenOrbit: () => void;
+  onOpenAccount: () => void;
+  embedded?: boolean;
 };
 
 function weekDays(anchor: string): string[] {
@@ -37,20 +43,21 @@ function weekDays(anchor: string): string[] {
 }
 
 function dayLoadMinutes(tasks: Task[], dateKey: string): number {
-  return tasksOnDate(tasks, dateKey).reduce(
-    (sum, t) => sum + t.estimateMinutes,
-    0,
-  );
+  return tasks
+    .filter((t) => occursOnDate(t, dateKey))
+    .reduce((sum, t) => sum + t.estimateMinutes, 0);
 }
 
 export function CalendarScreen({
   areas,
-  weights,
+  usualWeek,
   tasks,
   onOpenTask,
   onScheduleTask,
   onCapture,
   onOpenOrbit,
+  onOpenAccount,
+  embedded = false,
 }: CalendarScreenProps) {
   const today = todayKey();
   const [anchor, setAnchor] = useState(today);
@@ -77,8 +84,12 @@ export function CalendarScreen({
   );
 
   const selectedLoad = dayLoadMinutes(tasks, selectedDay);
-  const selectedBudget = weights.reduce((s, w) => s + w.hours, 0);
+  const selectedBudget = areas.reduce(
+    (s, a) => s + plannedHoursForArea(usualWeek, a.id, "today", selectedDay),
+    0,
+  );
   const dayOver = selectedLoad / 60 > selectedBudget;
+  const dayBlocks = blocksOnDate(usualWeek, selectedDay);
 
   const maxDayLoad = Math.max(
     ...days.map((d) => dayLoadMinutes(tasks, d)),
@@ -86,7 +97,8 @@ export function CalendarScreen({
   );
 
   return (
-    <div className="relative flex min-h-full flex-col px-5 pb-28 pt-14">
+    <div className={`relative flex min-h-full flex-col ${embedded ? "px-4 pb-6 pt-4" : "px-5 pb-28 pt-14"}`}>
+      {!embedded && (
       <div className="relative z-10 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-app-faint">
@@ -95,7 +107,6 @@ export function CalendarScreen({
           <h1 className="mt-0.5 text-lg font-semibold text-app">Your week</h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <ThemeToggle compact />
           <button
             type="button"
             onClick={onOpenOrbit}
@@ -103,28 +114,21 @@ export function CalendarScreen({
           >
             Orbit
           </button>
+          <ThemeToggle compact />
+          <button
+            type="button"
+            onClick={onOpenAccount}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-app bg-app-card text-app-secondary"
+            aria-label="Account"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+            </svg>
+          </button>
         </div>
       </div>
-
-      {/* Google Calendar — future sync */}
-      <div className="relative z-10 mt-3 flex items-center gap-3 rounded-2xl border border-app bg-app-card px-3.5 py-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-app-chip">
-          <GoogleCalIcon />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-app">Google Calendar</p>
-          <p className="text-[11px] text-app-muted">
-            Sync coming soon — events will map to schedule days.
-          </p>
-        </div>
-        <button
-          type="button"
-          disabled
-          className="shrink-0 rounded-full bg-app-chip px-3 py-1.5 text-[11px] font-medium text-app-faint"
-        >
-          Connect
-        </button>
-      </div>
+      )}
 
       {/* Week nav */}
       <div className="relative z-10 mt-4 flex items-center justify-between">
@@ -251,24 +255,21 @@ export function CalendarScreen({
           Life blocks · 12 AM – 12 AM
         </p>
         <div className="relative mb-2 h-8 overflow-hidden rounded-lg bg-app-track">
-          {areas
-            .filter((area) => areaAppliesOnDate(area, selectedDay))
-            .flatMap((area) =>
-              (area.blocks ?? []).flatMap((block) =>
-                blockTimelineRanges(block).map((range, i) => (
-                  <div
-                    key={`${area.id}-${block.id}-${i}`}
-                    title={`${area.name}: ${blocksSummary([block])}`}
-                    className="absolute top-1 bottom-1 rounded-sm opacity-90"
-                    style={{
-                      left: `${range.left}%`,
-                      width: `${Math.max(range.width, 0.8)}%`,
-                      backgroundColor: area.color,
-                    }}
-                  />
-                )),
-              ),
-            )}
+          {dayBlocks.flatMap((block) => {
+            const area = areas.find((a) => a.id === block.areaId);
+            return blockTimelineRanges(block).map((range, i) => (
+              <div
+                key={`${block.id}-${i}`}
+                title={`${area?.name ?? "?"}: ${blocksSummary([block])}`}
+                className="absolute top-1 bottom-1 rounded-sm opacity-90"
+                style={{
+                  left: `${range.left}%`,
+                  width: `${Math.max(range.width, 0.8)}%`,
+                  backgroundColor: area?.color ?? "#888",
+                }}
+              />
+            ));
+          })}
         </div>
         <div className="mb-2 flex justify-between text-[9px] text-app-faint">
           <span>12 AM</span>
@@ -278,33 +279,32 @@ export function CalendarScreen({
           <span>12 AM</span>
         </div>
         <div className="flex flex-col gap-1">
-          {areas
-            .filter(
-              (a) =>
-                areaAppliesOnDate(a, selectedDay) && (a.blocks ?? []).length > 0,
-            )
-            .map((area) => (
+          {dayBlocks.map((block) => {
+            const area = areas.find((a) => a.id === block.areaId);
+            return (
               <div
-                key={area.id}
+                key={block.id}
                 className="flex items-start gap-2 text-[11px] text-app-muted"
               >
                 <span
                   className="mt-1 h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: area.color }}
+                  style={{ backgroundColor: area?.color ?? "#888" }}
                 />
                 <span className="min-w-0">
-                  <span className="font-medium text-app">{area.name}</span>
+                  <span className="font-medium text-app">
+                    {area?.name ?? "Unknown"}
+                  </span>
                   <span className="text-app-faint">
                     {" "}
-                    · {blocksSummary(area.blocks)}
+                    · {blocksSummary([block])}
                   </span>
                 </span>
               </div>
-            ))}
-          {areas.filter((a) => areaAppliesOnDate(a, selectedDay)).length ===
-            0 && (
+            );
+          })}
+          {dayBlocks.length === 0 && (
             <p className="text-[11px] text-app-faint">
-              No planned blocks for this day.
+              No blocks on usual week for this day. Edit Week to add some.
             </p>
           )}
         </div>
@@ -320,39 +320,64 @@ export function CalendarScreen({
               onClick={onCapture}
               className="mt-2 text-sm font-medium text-app-accent"
             >
-              Dump something
+              Capture something
             </button>
           </div>
         )}
 
         {dayTasks.map((task) => {
           const area = areas.find((a) => a.id === task.areaId);
+          const completed = isCompletedOnDate(task, selectedDay);
           return (
             <button
               key={task.id}
               type="button"
               onClick={() => onOpenTask(task.id, selectedDay)}
-              className="flex items-start gap-3 rounded-2xl border border-app bg-app-card px-3.5 py-3 text-left active:scale-[0.99]"
+              className={`flex items-start gap-3 rounded-2xl border border-app bg-app-card px-3.5 py-3 text-left active:scale-[0.99] ${
+                completed ? "opacity-75" : ""
+              }`}
             >
               <span
-                className="mt-1 h-8 w-1 shrink-0 rounded-full"
-                style={{ backgroundColor: area?.color ?? "#8b7cf6" }}
+                className={`mt-1 h-8 w-1 shrink-0 rounded-full ${
+                  completed ? "bg-app-faint" : ""
+                }`}
+                style={
+                  completed ? undefined : { backgroundColor: area?.color ?? "#8b7cf6" }
+                }
               />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-app">{task.title}</p>
+                <p
+                  className={`text-sm font-medium ${
+                    completed ? "text-app-faint line-through" : "text-app"
+                  }`}
+                >
+                  {task.title}
+                </p>
                 <p className="mt-0.5 text-xs text-app-muted">
                   {area?.name ?? "Area"} · {formatMinutes(task.estimateMinutes)}
-                  {isRecurring(task) && (
-                    <span className="text-app-accent-soft">
-                      {" "}
-                      · {scheduleLabel(task)}
-                    </span>
-                  )}
-                  {task.reminder !== "none" && (
-                    <span className="text-app-faint">
-                      {" "}
-                      · 🔔 {reminderLabel(task.reminder)}
-                    </span>
+                  {completed ? (
+                    <span className="text-app-success"> · Done</span>
+                  ) : (
+                    <>
+                      {task.scheduledTime && (
+                        <span className="text-app-accent-soft">
+                          {" "}
+                          · {formatTimeLabel(task.scheduledTime.slice(0, 5))}
+                        </span>
+                      )}
+                      {isRecurring(task) && (
+                        <span className="text-app-accent-soft">
+                          {" "}
+                          · {scheduleLabel(task)}
+                        </span>
+                      )}
+                      {task.reminder !== "none" && (
+                        <span className="text-app-faint">
+                          {" "}
+                          · 🔔 {reminderLabel(task.reminder)}
+                        </span>
+                      )}
+                    </>
                   )}
                 </p>
               </div>
@@ -395,7 +420,8 @@ export function CalendarScreen({
       </div>
 
       {/* Bottom tabs */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 flex border-t border-app bg-app-nav px-6 pb-6 pt-2 backdrop-blur">
+      {!embedded && (
+      <div className="absolute bottom-0 left-0 right-0 z-20 flex border-t border-app bg-app-nav px-6 pb-6 pt-2 backdrop-blur lg:hidden">
         <button
           type="button"
           onClick={onOpenOrbit}
@@ -407,8 +433,8 @@ export function CalendarScreen({
         <button
           type="button"
           onClick={onCapture}
-          className="-mt-5 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-violet-500 to-violet-400 text-xl font-semibold text-white shadow-lg shadow-violet-500/30"
-          aria-label="Dump it"
+          className="fab-primary -mt-5"
+          aria-label="Capture"
         >
           +
         </button>
@@ -420,21 +446,7 @@ export function CalendarScreen({
           <span className="text-[10px] font-medium">Calendar</span>
         </button>
       </div>
+      )}
     </div>
-  );
-}
-
-function GoogleCalIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
-      <path
-        fill="#4285F4"
-        d="M19.5 4h-2V3a1 1 0 10-2 0v1h-7V3a1 1 0 10-2 0v1h-2A2.5 2.5 0 002 6.5v13A2.5 2.5 0 004.5 22h15a2.5 2.5 0 002.5-2.5v-13A2.5 2.5 0 0019.5 4z"
-      />
-      <path fill="#fff" d="M4 9h16v11.5a.5.5 0 01-.5.5h-15a.5.5 0 01-.5-.5V9z" />
-      <path fill="#EA4335" d="M7 12h3v3H7z" />
-      <path fill="#FBBC05" d="M10.5 12h3v3h-3z" />
-      <path fill="#34A853" d="M14 12h3v3h-3z" />
-    </svg>
   );
 }

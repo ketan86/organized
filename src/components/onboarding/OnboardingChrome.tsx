@@ -21,7 +21,7 @@ export function OnboardingChrome({
   footer,
 }: OnboardingChromeProps) {
   return (
-    <div className="flex min-h-full flex-col px-6 pb-8 pt-14">
+    <div className="flex min-h-full flex-col px-6 pb-8 pt-14 lg:px-0 lg:pt-16">
       <div className="mb-6 flex items-center gap-3">
         {onBack ? (
           <button
