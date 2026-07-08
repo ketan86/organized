@@ -96,6 +96,10 @@ export function subscriptionToJson(subscription: PushSubscription) {
   };
 }
 
+/**
+ * Prefer the service worker notification API (standard for PWAs).
+ * Falling back to `new Notification` only if no SW is available.
+ */
 export function showLocalNotification(
   title: string,
   options?: NotificationOptions,
@@ -110,16 +114,22 @@ export function showLocalNotification(
     ...options,
   };
 
-  try {
-    new Notification(title, payload);
-    return;
-  } catch {
-    // Fall back to service worker when the page cannot create notifications directly.
-  }
-
   if ("serviceWorker" in navigator) {
     void navigator.serviceWorker.ready
       .then((registration) => registration.showNotification(title, payload))
-      .catch(() => undefined);
+      .catch(() => {
+        try {
+          new Notification(title, payload);
+        } catch {
+          /* browser blocked */
+        }
+      });
+    return;
+  }
+
+  try {
+    new Notification(title, payload);
+  } catch {
+    /* browser blocked */
   }
 }

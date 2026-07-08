@@ -1,4 +1,6 @@
 let audioContext: AudioContext | null = null;
+let unlocked = false;
+let unlockListenersAttached = false;
 
 export type ReminderSoundId = "bells" | "chime" | "pulse" | "gentle";
 
@@ -157,21 +159,58 @@ const SOUND_PLAYERS: Record<ReminderSoundId, (ctx: AudioContext) => void> = {
   gentle: playGentleSound,
 };
 
-/** Call after a user gesture so the first reminder can play sound. */
-export function unlockReminderAudio() {
+async function ensureRunningContext(): Promise<AudioContext | null> {
   const ctx = getAudioContext();
-  if (ctx?.state === "suspended") void ctx.resume().catch(() => undefined);
+  if (!ctx) return null;
+  if (ctx.state === "suspended") {
+    try {
+      await ctx.resume();
+    } catch {
+      return null;
+    }
+  }
+  if (ctx.state === "running") {
+    unlocked = true;
+    return ctx;
+  }
+  return null;
 }
 
-export function playReminderSound(soundId: ReminderSoundId = "bells") {
-  const ctx = getAudioContext();
-  if (!ctx) return;
+/** Call after a user gesture so later reminders can play sound. */
+export function unlockReminderAudio(): void {
+  void ensureRunningContext();
+}
 
-  const start = () => SOUND_PLAYERS[soundId](ctx);
+/**
+ * Attach one-time gesture listeners (click / key / touch) so browsers allow
+ * AudioContext without requiring the user to open Settings → Preview.
+ */
+export function armReminderAudioUnlock(): void {
+  if (typeof window === "undefined" || unlockListenersAttached) return;
+  unlockListenersAttached = true;
 
-  if (ctx.state === "suspended") {
-    void ctx.resume().then(start).catch(() => undefined);
-    return;
-  }
-  start();
+  const unlock = () => {
+    unlockReminderAudio();
+    if (unlocked) {
+      window.removeEventListener("pointerdown", unlock, true);
+      window.removeEventListener("keydown", unlock, true);
+      window.removeEventListener("touchstart", unlock, true);
+    }
+  };
+
+  window.addEventListener("pointerdown", unlock, true);
+  window.addEventListener("keydown", unlock, true);
+  window.addEventListener("touchstart", unlock, { capture: true, passive: true });
+}
+
+export function isReminderAudioUnlocked(): boolean {
+  return unlocked && audioContext?.state === "running";
+}
+
+export function playReminderSound(soundId: ReminderSoundId = "bells"): void {
+  void (async () => {
+    const ctx = await ensureRunningContext();
+    if (!ctx) return;
+    SOUND_PLAYERS[soundId](ctx);
+  })();
 }

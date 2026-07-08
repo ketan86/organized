@@ -40,7 +40,7 @@ export function ReminderSoundSettings() {
 
       {reminderSoundEnabled && (
         <>
-          <SettingsRow label="Sound style" hint="Plays when a reminder fires in-app">
+          <SettingsRow label="Sound style" hint="Custom chime while this tab is open">
             <select
               value={reminderSoundId}
               onChange={(e) => setReminderSoundId(e.target.value as ReminderSoundId)}
@@ -56,9 +56,7 @@ export function ReminderSoundSettings() {
 
           <SettingsRow
             label="Preview"
-            hint={
-              REMINDER_SOUND_OPTIONS.find((o) => o.id === reminderSoundId)?.hint
-            }
+            hint="Tap once so the browser allows reminder sound"
             onClick={() => previewReminderSound()}
           >
             <span className="text-sm font-medium text-app-accent">Play</span>

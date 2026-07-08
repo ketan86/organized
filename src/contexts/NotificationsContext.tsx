@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { playReminderSound, unlockReminderAudio, type ReminderSoundId } from "@/lib/notifications/reminder-sound";
+import { playReminderSound, unlockReminderAudio, armReminderAudioUnlock, type ReminderSoundId } from "@/lib/notifications/reminder-sound";
 import {
   loadReminderSoundPrefs,
   saveReminderSoundPrefs,
@@ -20,6 +20,7 @@ import {
   getNotificationSupport,
   hasLocalReminderFired,
   markLocalReminderFired,
+  registerServiceWorker,
   showLocalNotification,
   subscribeToPush,
   subscriptionToJson,
@@ -113,6 +114,21 @@ export function NotificationsProvider({
 
   useEffect(() => {
     if (!enabled) return;
+    armReminderAudioUnlock();
+    void registerServiceWorker().catch(() => undefined);
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") unlockReminderAudio();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
     void api.push
       .config()
       .then((config) => {
@@ -135,6 +151,7 @@ export function NotificationsProvider({
       saveReminderSoundPrefs(next);
       return next;
     });
+    if (enabled) unlockReminderAudio();
   }, []);
 
   const setReminderSoundId = useCallback((soundId: ReminderSoundId) => {
@@ -161,7 +178,11 @@ export function NotificationsProvider({
   const fireReminder = useCallback((task: Task, dedupeKey: string) => {
     if (hasLocalReminderFired(dedupeKey)) return;
     markLocalReminderFired(dedupeKey);
-    if (soundPrefs.enabled) {
+
+    const visible =
+      typeof document !== "undefined" && document.visibilityState === "visible";
+
+    if (soundPrefs.enabled && visible) {
       playReminderSound(soundPrefs.soundId);
     }
 
@@ -176,7 +197,8 @@ export function NotificationsProvider({
     showLocalNotification(task.title, {
       body: "Reminder",
       tag: dedupeKey,
-      data: { taskId: task.id, kind: "task" },
+      silent: visible,
+      data: { url: "/", taskId: task.id, kind: "task" },
     });
   }, [soundPrefs.enabled, soundPrefs.soundId]);
 
@@ -189,7 +211,11 @@ export function NotificationsProvider({
     ) => {
       if (hasLocalReminderFired(dedupeKey)) return;
       markLocalReminderFired(dedupeKey);
-      if (soundPrefs.enabled) {
+
+      const visible =
+        typeof document !== "undefined" && document.visibilityState === "visible";
+
+      if (soundPrefs.enabled && visible) {
         playReminderSound(soundPrefs.soundId);
       }
 
@@ -206,7 +232,8 @@ export function NotificationsProvider({
       showLocalNotification(title, {
         body,
         tag: dedupeKey,
-        data: { areaId: area.id, kind: "area-boundary" },
+        silent: visible,
+        data: { url: "/", areaId: area.id, kind: "area-boundary" },
       });
     },
     [soundPrefs.enabled, soundPrefs.soundId],
@@ -277,7 +304,9 @@ export function NotificationsProvider({
     setEnabling(true);
     setEnableError(null);
     try {
-      // Must run immediately on click — awaiting fetch first breaks the gesture.
+      // Gesture chain: SW register → permission → unlock audio → push subscribe.
+      await registerServiceWorker().catch(() => null);
+
       const permission = await Notification.requestPermission();
       const nextSupport = getNotificationSupport();
       setSupport(nextSupport);
@@ -291,8 +320,12 @@ export function NotificationsProvider({
         return false;
       }
 
-      showLocalNotification("Organized", { body: "Notifications enabled." });
       unlockReminderAudio();
+      showLocalNotification("Organized", {
+        body: "Notifications enabled.",
+        tag: "organized-enabled",
+        data: { url: "/", kind: "test" },
+      });
 
       if (pushConfigured && vapidPublicKey && nextSupport.pushSupported) {
         try {

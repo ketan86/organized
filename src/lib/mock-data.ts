@@ -397,26 +397,17 @@ export function inferTimeFromText(text: string): string | null {
   return null;
 }
 
+/**
+ * Preferred *task start* time for placement inside a life-area window.
+ * Reminder fire times are intentionally ignored — only schedule from title
+ * (e.g. "yoga at 6pm") or an existing scheduledTime passed by the caller.
+ */
 export function resolvePreferredTime(input: {
   title?: string;
-  reminder: Reminder;
-  recurrence: Recurrence;
+  reminder?: Reminder;
+  recurrence?: Recurrence;
   scheduledDate?: string | null;
 }): string | null {
-  const absolute = parseAbsoluteReminder(input.reminder);
-  if (absolute) {
-    if (!input.scheduledDate || absolute.dateKey === input.scheduledDate) {
-      return normalizeTimeWithSeconds(absolute.time);
-    }
-  }
-
-  const clock = reminderClockTime(input.reminder);
-  if (clock) {
-    return normalizeTimeWithSeconds(
-      `${String(clock.hours).padStart(2, "0")}:${String(clock.minutes).padStart(2, "0")}`,
-    );
-  }
-
   return inferTimeFromText(input.title ?? "");
 }
 

@@ -1,5 +1,11 @@
 self.addEventListener("push", (event) => {
-  const payload = event.data?.json?.() ?? {};
+  let payload = {};
+  try {
+    payload = event.data?.json?.() ?? {};
+  } catch {
+    payload = { body: event.data?.text?.() ?? "" };
+  }
+
   const title = payload.title ?? "Organized";
   const body = payload.body ?? "";
   const url = payload.url ?? "/";
@@ -15,6 +21,7 @@ self.addEventListener("push", (event) => {
       icon: "/globe.svg",
       badge: "/globe.svg",
       tag,
+      renotify: true,
       data: {
         url,
         taskId: payload.taskId,
@@ -29,14 +36,21 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data?.url ?? "/";
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if ("focus" in client) {
-          client.focus();
-          return;
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        for (const client of clients) {
+          if ("focus" in client) {
+            client.focus();
+            if ("navigate" in client && url) {
+              return client.navigate(url);
+            }
+            return;
+          }
         }
-      }
-      return self.clients.openWindow(url);
-    }),
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(url);
+        }
+      }),
   );
 });

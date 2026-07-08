@@ -277,7 +277,7 @@ export function ManualTaskSheet({
             Today&apos;s {area.name} window:{" "}
             {formatAreaWindowsOnDate(usualWeek, area.id, todayKey())}
             {preferredTime
-              ? ` · planning ${formatTimeForDisplay(preferredTime)}`
+              ? ` · planning ${formatTimeForDisplay(preferredTime)} from the title`
               : " · we'll pick a slot in that window"}
           </p>
         )}
